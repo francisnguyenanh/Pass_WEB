@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Đặt container chiếm 95% chiều rộng màn hình */
+        .container.mt-4 {
+            width: 95%;
+            max-width: none; /* Loại bỏ giới hạn max-width mặc định của Bootstrap */
+        }
+
+        /* Đặt table-responsive chiếm 100% container */
+        .table-responsive {
+            width: 100%;
+        }
+
+        /* CSS cho Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #0d6efd;
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Tăng chiều rộng cho ô Password */
+        .password-field {
+            width: 100%;
+            min-width: 250px; /* Đảm bảo đủ rộng để hiển thị toàn bộ mật khẩu */
+        }
+
+        /* Định dạng để nút Copy và Switch nằm dưới */
+        .username-container, .password-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+        }
+
+        /* Icon cho Edit và Delete */
+        .action-icon {
+            font-size: 1.2rem;
+            margin-right: 10px;
+        }
+
+        /* Style cho icon buttons */
+        .icon-btn {
+            font-size: 1.5rem; /* Kích thước icon lớn */
+            padding: 10px; /* Padding lớn để dễ thao tác */
+            border: none;
+            background: none;
+            color: #0d6efd;
+            cursor: pointer;
+        }
+        .icon-btn:hover {
+            color: #005cbf;
+        }
+        .icon-btn.success:hover {
+            color: #198754;
+        }
+
+        /* Style cho sort headers */
+        .sort-header {
+            color: #0d6efd;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .sort-header:hover {
+            color: #005cbf;
+            text-decoration: underline;
+        }
+        .sort-icon {
+            font-size: 1rem;
+        }
+
+        /* Style cho search input */
+        .search-input {
+            margin-bottom: 1rem;
+        }
+
+        /* Style cho top-right dropdown */
+        .top-right-dropdown {
+            margin-bottom: 1.5rem; /* Tăng margin để tạo khoảng cách với nội dung bên dưới */
+        }
+
+        /* Style cho page title */
+        .page-title {
+            margin-bottom: 1rem; /* Khoảng cách dưới tiêu đề */
+        }
+
+        /* Ensure text remains readable on colored backgrounds */
+        tr {
+            transition: background-color 0.3s;
+        }
+        tr td {
+            color: #000; /* Ensure text is readable */
+        }
+        tr td a {
+            color: #0d6efd; /* Keep link colors consistent */
+        }
+        .notes-field {
+            width: 100%;
+            min-width: 300px; /* Đặt chiều rộng tối thiểu cho cột Notes */
+            white-space: pre-wrap; /* Cho phép xuống dòng tự động */
+            word-wrap: break-word; /* Đảm bảo từ dài không tràn */
+        }
+    </style>
+    <script>
+        function togglePassword(id) {
+            var passwordField = document.getElementById('password-' + id);
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+            } else {
+                passwordField.type = 'password';
+            }
+        }
+        function copyText(value, type, id) {
+            if (value.startsWith('Error:')) {
+                alert('Cannot copy: Invalid value');
+                return;
+            }
+            const copyButton = document.getElementById('copy-btn-' + id);
+            navigator.clipboard.writeText(value).then(() => {
+                copyButton.style.color = '#198754'; // Change to green on success
+                setTimeout(() => {
+                    copyButton.style.color = '#0d6efd'; // Revert to original color
+                }, 1000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+        function searchTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toLowerCase();
+            const table = document.querySelector('.table');
+            const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+
+            for (let i = 0; i < rows.length; i++) {
+                const cells = rows[i].getElementsByTagName('td');
+                let rowText = '';
+                // Lấy nội dung từ các cột trừ cột Actions (cột đầu tiên sau khi di chuyển)
+                for (let j = 1; j < cells.length; j++) { // Bỏ cột Actions (cột 0)
+                    rowText += cells[j].textContent.toLowerCase() + ' ';
+                }
+                if (rowText.includes(filter)) {
+                    rows[i].style.display = '';
+                } else {
+                    rows[i].style.display = 'none';
+                }
+            }
+        }
+        function highlightRowsByUrl() {
+            const rows = document.querySelectorAll('.table tbody tr');
+            const urlMap = {};
+            const colors = [
+                '#e6f3ff', '#ffe6e6', '#e6ffe6', '#fff5e6', '#f0e6ff',
+                '#e6f3e6', '#f3e6ff', '#ffe6f0', '#e6e6ff', '#fffae6'
+            ];
+            let colorIndex = 0;
+
+            // Group rows by URL (URL is now in the second column, index 1)
+            rows.forEach(row => {
+                const urlCell = row.cells[1]; // URL is in the second column
+                const url = urlCell.textContent.trim();
+                if (url) {
+                    if (!urlMap[url]) {
+                        urlMap[url] = colors[colorIndex % colors.length];
+                        colorIndex++;
+                    }
+                    row.style.backgroundColor = urlMap[url];
+                }
+            });
+        }
+        // Run highlighting on page load
+        window.onload = highlightRowsByUrl;
+    </script>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="page-title">Tomo Password</h1>
+        <div class="d-flex justify-content-end top-right-dropdown">
+            <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-cog"></i> Actions
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importCsvModal"><i class="fas fa-file-csv me-2"></i>Import CSV</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('change_key') }}"><i class="fas fa-key me-2"></i>Change Key/Password</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('export') }}"><i class="fas fa-file-export me-2"></i>Export Passwords</a></li>
+                    <li>
+                        <form action="{{ url_for('clear_db') }}" method="post" onsubmit="return confirm('Are you sure you want to clear the entire database? This action cannot be undone.');">
+                            <button type="submit" class="dropdown-item"><i class="fas fa-trash-alt me-2"></i>Clear Database</button>
+                        </form>
+                    </li>
+
+                </ul>
+            </div>
+        </div>
+        <input type="text" id="searchInput" class="form-control search-input" placeholder="Search passwords..." oninput="searchTable()">
+
+        <!-- Modal for Import CSV -->
+        <div class="modal fade" id="importCsvModal" tabindex="-1" aria-labelledby="importCsvModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="importCsvModalLabel">Import CSV</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form method="post" enctype="multipart/form-data" action="{{ url_for('import_csv') }}">
+                            <input type="hidden" name="sort_by" value="{{ sort_by }}">
+                            <input type="hidden" name="sort_order" value="{{ sort_order }}">
+                            <div class="mb-3">
+                                <label for="csvFile" class="form-label">Select CSV file</label>
+                                <input type="file" name="file" id="csvFile" accept=".csv" class="form-control" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Upload</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <a href="{{ url_for('add') }}" class="icon-btn success mb-3" title="Add New Password">
+            <i class="fas fa-plus-circle"></i>
+        </a>
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Actions</th> <!-- Di chuyển cột Actions lên đầu -->
+                        <th>
+                            <a href="{{ url_for('index', sort_by='title', sort_order='desc' if sort_by == 'title' and sort_order == 'asc' else 'asc') }}" class="sort-header">
+                                Title
+                                <i class="fas {% if sort_by == 'title' and sort_order == 'asc' %}fa-sort-up{% elif sort_by == 'title' and sort_order == 'desc' %}fa-sort-down{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('index', sort_by='url', sort_order='desc' if sort_by == 'url' and sort_order == 'asc' else 'asc') }}" class="sort-header">
+                                URL
+                                <i class="fas {% if sort_by == 'url' and sort_order == 'asc' %}fa-sort-up{% elif sort_by == 'url' and sort_order == 'desc' %}fa-sort-down{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('index', sort_by='username', sort_order='desc' if sort_by == 'username' and sort_order == 'asc' else 'asc') }}" class="sort-header">
+                                Username
+                                <i class="fas {% if sort_by == 'username' and sort_order == 'asc' %}fa-sort-up{% elif sort_by == 'username' and sort_order == 'desc' %}fa-sort-down{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </a>
+                        </th>
+                        <th>Password</th>
+                        <th>
+                            <a href="{{ url_for('index', sort_by='notes', sort_order='desc' if sort_by == 'notes' and sort_order == 'asc' else 'asc') }}" class="sort-header">
+                                Notes
+                                <i class="fas {% if sort_by == 'notes' and sort_order == 'asc' %}fa-sort-up{% elif sort_by == 'notes' and sort_order == 'desc' %}fa-sort-down{% else %}fa-sort{% endif %} sort-icon"></i>
+                            </a>
+                        </th>
+                        <th>OTPAuth</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for password in passwords %}
+                    <tr>
+                        <td> <!-- Cột Actions -->
+                            <a href="{{ url_for('edit', id=password.id) }}" class="action-icon text-warning" title="Edit"><i class="fas fa-edit"></i></a>
+                            <a href="{{ url_for('delete', id=password.id) }}" class="action-icon text-danger" title="Delete" onclick="return confirm('Are you sure?')"><i class="fas fa-trash"></i></a>
+                        </td>
+                        <td>{{ password.title }}</td>
+                        <td>
+                            <a href="{{ password.url }}" class="text-primary" target="_blank">{{ password.url }}</a>
+                        </td>
+                        <td>
+                            <div class="username-container">
+                                <span>{{ password.username | safe }}</span>
+                                <button type="button" class="icon-btn" id="copy-btn-{{ password.id }}" title="Copy" onclick="copyText('{{ password.username | safe }}', 'Username', {{ password.id }})">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="password-container">
+                                <input type="password" id="password-{{ password.id }}" value="{{ password.password | decrypt | safe }}" class="form-control password-field" readonly>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" onclick="togglePassword({{ password.id }})">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </td>
+                        <td>{{ password.notes | safe }}</td>
+                        <td>{{ password.otpauth | safe }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alert alert-info mt-3">
+                    {% for message in messages %}
+                        <p>{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
